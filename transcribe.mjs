@@ -91,25 +91,55 @@ async function downloadAudio(videoId, outputPath) {
     '-f', 'bestaudio',
     '--extract-audio', '--audio-format', 'mp3',
     '--no-part',
-    // iOS player client: no JS runtime needed and avoids GitHub Actions IP bot-checks.
-    '--extractor-args', 'youtube:player_client=ios,web',
+    // Node.js is available on Actions runners; register it so yt-dlp can solve
+    // YouTube's n-challenge (URL obfuscation) that the web client requires.
+    '--js-runtimes', 'nodejs',
     '-o', template,
   ];
-  if (process.env.YT_DLP_COOKIES) args.push('--cookies', process.env.YT_DLP_COOKIES);
+  if (process.env.YT_DLP_COOKIES) {
+    args.push('--cookies', process.env.YT_DLP_COOKIES);
+    // iOS client doesn't support cookie auth — use web client (needs nodejs for n-challenge).
+    args.push('--extractor-args', 'youtube:player_client=web,mweb');
+  } else {
+    // Without cookies, iOS bypasses bot detection and skips the n-challenge entirely.
+    args.push('--extractor-args', 'youtube:player_client=ios,web');
+  }
   args.push(url);
+
+  // Patterns that mean the video will never be downloadable — no point retrying.
+  const PERMANENT_ERRORS = [
+    'Requested format is not available',
+    'Only images are available',
+    'This live event will begin',
+    'Private video',
+    'Video unavailable',
+    'has been removed',
+  ];
 
   let lastError = null;
   for (let attempt = 0; attempt < GEMINI_MAX_RETRIES; attempt++) {
     try {
       await new Promise((resolve, reject) => {
-        const proc = spawn('yt-dlp', args, { stdio: ['ignore', 'ignore', 'inherit'] });
-        proc.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`yt-dlp exited ${code}`))));
+        let stderr = '';
+        const proc = spawn('yt-dlp', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+        proc.stderr.on('data', (d) => { stderr += d; process.stderr.write(d); });
+        proc.on('close', (code) => {
+          if (code === 0) return resolve();
+          const permanent = PERMANENT_ERRORS.find((p) => stderr.includes(p));
+          if (permanent) {
+            const e = new Error(`yt-dlp: ${permanent} (permanent, not retrying)`);
+            e.permanent = true;
+            return reject(e);
+          }
+          reject(new Error(`yt-dlp exited ${code}`));
+        });
         proc.on('error', reject);
       });
       return;
     } catch (err) {
       lastError = err;
       await fs.unlink(outputPath).catch(() => {});
+      if (err.permanent) throw err; // skip retries for permanent failures
       if (attempt < GEMINI_MAX_RETRIES - 1) await sleep(Math.pow(2, attempt) * 1000);
     }
   }
