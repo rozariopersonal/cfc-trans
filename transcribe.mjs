@@ -87,7 +87,14 @@ function assertLease(res) {
 async function downloadAudio(videoId, outputPath) {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const template = outputPath.replace(/\.mp3$/, '.%(ext)s');
-  const args = ['-f', 'bestaudio', '--extract-audio', '--audio-format', 'mp3', '--no-part', '-o', template];
+  const args = [
+    '-f', 'bestaudio',
+    '--extract-audio', '--audio-format', 'mp3',
+    '--no-part',
+    // iOS player client: no JS runtime needed and avoids GitHub Actions IP bot-checks.
+    '--extractor-args', 'youtube:player_client=ios,web',
+    '-o', template,
+  ];
   if (process.env.YT_DLP_COOKIES) args.push('--cookies', process.env.YT_DLP_COOKIES);
   args.push(url);
 
