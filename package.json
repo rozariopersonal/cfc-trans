@@ -1,0 +1,13 @@
+{
+  "name": "christian-tube-transcription-runner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone GitHub Actions transcription runner for ChristianTube. Claims videos from the backend, transcribes with yt-dlp + ffmpeg + Gemini, and POSTs results back over HTTPS.",
+  "scripts": {
+    "start": "node transcribe.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,60 @@
+name: Transcribe
+
+# IMPORTANT (public repo): trigger ONLY on schedule / manual dispatch.
+# Never add `pull_request` or `pull_request_target` with checkout of PR code —
+# on a public repo that would expose the secrets below to fork PRs.
+on:
+  schedule:
+    - cron: '*/30 * * * *' # best-effort; GitHub may delay under load
+  workflow_dispatch:
+    inputs:
+      max_videos:
+        description: 'Max videos to process this run'
+        required: false
+        default: '50'
+
+# Never run two transcription jobs at once (they'd compete for the same queue;
+# the lease still protects correctness, but overlap wastes minutes).
+concurrency:
+  group: transcribe
+  cancel-in-progress: false
+
+jobs:
+  transcribe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350 # under the 6h hard cap; TIME_BUDGET_SECONDS exits sooner
+    env:
+      # Secrets can't be used in step `if:` conditions, so surface this one as an
+      # env var the cookies step can test.
+      COOKIES_CONTENT: ${{ secrets.YT_DLP_COOKIES }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install ffmpeg + yt-dlp
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
+          sudo chmod a+rx /usr/local/bin/yt-dlp
+          yt-dlp --version
+
+      - name: Write YouTube cookies (optional)
+        if: ${{ env.COOKIES_CONTENT != '' }}
+        run: |
+          printf '%s' "$COOKIES_CONTENT" > "$RUNNER_TEMP/cookies.txt"
+          echo "YT_DLP_COOKIES=$RUNNER_TEMP/cookies.txt" >> "$GITHUB_ENV"
+
+      - name: Run transcription
+        run: node transcribe.mjs
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          INTERNAL_JOB_SECRET: ${{ secrets.INTERNAL_JOB_SECRET }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TRANSCRIPTION_MODEL: ${{ vars.TRANSCRIPTION_MODEL }}
+          TIME_BUDGET_SECONDS: ${{ vars.TIME_BUDGET_SECONDS || '18000' }}
+          MAX_VIDEOS: ${{ github.event.inputs.max_videos || vars.MAX_VIDEOS || '50' }}
+          # YT_DLP_COOKIES is exported into $GITHUB_ENV by the previous step when present.

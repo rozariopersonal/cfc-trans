@@ -1,0 +1,43 @@
+name: Embed
+
+# IMPORTANT (public repo): trigger ONLY on schedule / manual dispatch.
+# Never add `pull_request` or `pull_request_target` with checkout of PR code —
+# on a public repo that would expose the secrets below to fork PRs.
+on:
+  schedule:
+    - cron: '*/20 * * * *' # best-effort; GitHub may delay under load
+  workflow_dispatch:
+    inputs:
+      max_videos:
+        description: 'Max videos to embed this run'
+        required: false
+        default: '500'
+
+# One embedding run at a time — they'd compete for the same queue. The
+# embeddingClaimedAt marker protects correctness, but overlap wastes minutes.
+concurrency:
+  group: embed
+  cancel-in-progress: false
+
+jobs:
+  embed:
+    runs-on: ubuntu-latest
+    # No yt-dlp/ffmpeg here, just Gemini API calls — much shorter than transcribe.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run embedding
+        run: node embed.mjs
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          INTERNAL_JOB_SECRET: ${{ secrets.INTERNAL_JOB_SECRET }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          EMBEDDING_MODEL: ${{ vars.EMBEDDING_MODEL }}
+          EMBEDDING_BATCH_SIZE: ${{ vars.EMBEDDING_BATCH_SIZE || '25' }}
+          TIME_BUDGET_SECONDS: ${{ vars.EMBEDDING_TIME_BUDGET_SECONDS || '3000' }}
+          MAX_VIDEOS: ${{ github.event.inputs.max_videos || vars.EMBEDDING_MAX_VIDEOS || '500' }}
