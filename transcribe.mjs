@@ -93,7 +93,7 @@ async function downloadAudio(videoId, outputPath) {
     '--no-part',
     // Node.js is available on Actions runners; register it so yt-dlp can solve
     // YouTube's n-challenge (URL obfuscation) that the web client requires.
-    '--js-runtimes', 'nodejs',
+    '--js-runtimes', 'node',
     '-o', template,
   ];
   if (process.env.YT_DLP_COOKIES) {
