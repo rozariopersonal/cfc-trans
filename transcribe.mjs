@@ -93,8 +93,21 @@ async function downloadAudio(videoId, outputPath) {
     // them, tried in that order (tv needs no PO token, web/mweb do).
     '--extractor-args', 'youtube:player_client=tv,web,mweb;formats=missing_pot',
     '--js-runtimes', 'node',
+    // Downloads yt-dlp's n-challenge solver lib on first run (cached after); without
+    // it, formats requiring a solved n-param silently disappear.
+    '--remote-components', 'ejs:github',
   ];
-  if (process.env.YT_DLP_COOKIES) args.push('--cookies', process.env.YT_DLP_COOKIES);
+  if (process.env.YT_DLP_POT_BASE_URL) {
+    args.push('--extractor-args', `youtubepot-bgutilhttp:base_url=${process.env.YT_DLP_POT_BASE_URL}`);
+  }
+  // A live browser cookie jar never goes stale the way an exported copy does —
+  // yt-dlp re-reads it fresh on every invocation. Takes precedence over a file
+  // export when both are set.
+  if (process.env.YT_DLP_COOKIES_FROM_BROWSER) {
+    args.push('--cookies-from-browser', process.env.YT_DLP_COOKIES_FROM_BROWSER);
+  } else if (process.env.YT_DLP_COOKIES) {
+    args.push('--cookies', process.env.YT_DLP_COOKIES);
+  }
   args.push(url);
 
   let lastError = null;
