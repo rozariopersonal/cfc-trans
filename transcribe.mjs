@@ -87,7 +87,13 @@ function assertLease(res) {
 async function downloadAudio(videoId, outputPath) {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const template = outputPath.replace(/\.mp3$/, '.%(ext)s');
-  const args = ['-f', 'bestaudio', '--extract-audio', '--audio-format', 'mp3', '--no-part', '-o', template];
+  const args = [
+    '-f', 'bestaudio', '--extract-audio', '--audio-format', 'mp3', '--no-part', '-o', template,
+    // ios silently ignores cookies; tv/web/mweb are the clients that still honor
+    // them, tried in that order (tv needs no PO token, web/mweb do).
+    '--extractor-args', 'youtube:player_client=tv,web,mweb;formats=missing_pot',
+    '--js-runtimes', 'node',
+  ];
   if (process.env.YT_DLP_COOKIES) args.push('--cookies', process.env.YT_DLP_COOKIES);
   args.push(url);
 

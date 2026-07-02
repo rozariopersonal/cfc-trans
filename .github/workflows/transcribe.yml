@@ -38,9 +38,16 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
-          sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
-          sudo chmod a+rx /usr/local/bin/yt-dlp
-          yt-dlp --version
+          # Installed via pip (not the standalone binary) so the bgutil PO-token
+          # plugin below is importable in the same Python env.
+          python3 -m pip install --user --break-system-packages -U "yt-dlp[default]" bgutil-ytdlp-pot-provider
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/yt-dlp" --version
+
+      # PO tokens are required by the web/mweb clients yt-dlp falls back to; the
+      # tv client (tried first) doesn't need one. Runs alongside, harmless if unused.
+      - name: Start PO token provider
+        run: docker run -d --name bgutil-pot -p 4416:4416 brainicism/bgutil-ytdlp-pot-provider
 
       - name: Write YouTube cookies (optional)
         if: ${{ env.COOKIES_CONTENT != '' }}
